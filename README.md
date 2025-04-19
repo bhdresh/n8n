@@ -53,13 +53,7 @@ This project is an automated phishing detection pipeline built on [n8n](https://
 
 ## 📸 Demo
 
-📹 **Watch the demo video here**: [👉 Click to view](https://your-demo-video-link.com)
+📹 **Watch the demo video here**: [👉 Click to view](https://youtu.be/cCaZOshBdnY)
 
 ---
 
-## 🛠️ Setup
-
-1. Clone the repo:
-   ```bash
-   git clone https://github.com/your-username/phishing-detection-workflow.git
-   cd phishing-detection-workflow
