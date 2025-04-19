@@ -1,0 +1,2055 @@
+{
+  "name": "Phishing website analysis",
+  "nodes": [
+    {
+      "parameters": {
+        "fieldToSplitOut": "url",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -2500,
+        -1360
+      ],
+      "id": "c02cd482-0334-4a2a-a7ff-5381c6cead15",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Please check if below website looks like phishing page based on below details,\n\nRules for analysis:\n\n1) Check both IP and main domain whois details of potential phishing domain. If require, convert store.example.com to example.comm for whois lookup.\n2) Use all of available tools for further analysis.\n3) Some of the major key indicators to check for are,\n  a. Similarity of website description with original website. This one is the most important indicator. Phishing or fake websites are usually share same characteristics as original website.\n  b. Spreading wrong or incorrect information\n  c. Impersonating original website identities\n  d. Domain name looks like original domain\n  e. Domain registered recently\n  f. Short or free SSL certificate comapre to the original website\n4) Add confidence score of website being fake or phishing between 1 to 10 based on number of matching indicators.\n5) Add urgency of taking action if user is the owner of original website.\n6) Justify your analysis\n\nOutput format rules:\n\n1) Name of original website\n2) Name of potentially fake or phishing website\n3) Make your output telegram chat friendly. Make sure to avoid invalid markdown string.\n4) Your output must include final verdict.\n\n\n\n### Information about original website and potential phishing website\n\n{{ $json.data.toJsonString() }}",
+        "options": {
+          "systemMessage": "You are a Cyber security subject matter expert matter expert and highly skilled  phishing analyst."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.8,
+      "position": [
+        1940,
+        -2040
+      ],
+      "id": "9db2e17e-0052-463c-82f8-112b5b2580a7",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "qwen2.5:32b",
+        "options": {
+          "numCtx": 30000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        -1800
+      ],
+      "id": "f047649c-3909-467e-aa15-b45a1253291c",
+      "name": "Ollama Chat Model",
+      "credentials": {
+        "ollamaApi": {
+          "id": "wPbAlnFbaz11k1AL",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "=sh /home/node/.n8n/czds-api-client-python-master/list_domains.sh {{ $('Keyword to monitor').item.json.keyword }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -2960,
+        -1360
+      ],
+      "id": "35d9d301-e0fd-4418-81ad-c0250d75b14d",
+      "name": "Processing zone files"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e413489f-9bae-4b88-abdd-11440bdd555d",
+              "name": "url",
+              "value": "={{ $json.stdout.split(',') }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2740,
+        -1360
+      ],
+      "id": "36e169a4-cbcd-4cd1-b3a6-359cf841aadb",
+      "name": "Split field to array"
+    },
+    {
+      "parameters": {
+        "name": "whois_check",
+        "description": "Call this tool to check who is record of website/domain/ip address. The output should be a domain name like domain.com or IP address like 4.2.2.2 format.",
+        "jsCode": "const { exec } = require('child_process');\n\nconst websites = query.split(',').map((text) => text.trim());\n\nconsole.log(websites);\n\nfunction whois(website) {\n    return new Promise((resolve, reject) => {\n        const command = `whois ${website}`;\n        console.log(command);\n        exec(command, (error, stdout, stderr) => {\n            if (error || stderr) {\n                resolve(`Failed to resolve ${website}`);\n            } else {\n                const output = stdout.split('\\n');\n                console.log(output);\n                resolve(`output of whois command for ${website} :\\n\\n ${output}`);\n            }\n        });\n    });\n}\n\nconst results = await Promise.all(websites.map(whois));\nconsole.log(results);\nconst strValue = results.toString();\nreturn strValue;\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.1,
+      "position": [
+        1700,
+        -1800
+      ],
+      "id": "46a3c88c-5acb-4432-9f76-eb0ffc7df45c",
+      "name": "whois check"
+    },
+    {
+      "parameters": {
+        "name": "nslookup_check",
+        "description": "Call this tool to check if the domain/website has any A record defined to it or not. The output should be a domain name like domain.com",
+        "jsCode": "const { exec } = require('child_process');\n\nconst websites = query.split(',').map((text) => text.trim());\n\nconsole.log(websites);\n\nfunction nslookupHost(website) {\n    return new Promise((resolve, reject) => {\n        const command = `nslookup ${website}`;\n        console.log(command);\n        exec(command, (error, stdout, stderr) => {\n            if (error || stderr) {\n                resolve(`Failed to resolve ${website}`);\n            } else {\n                const output = stdout.split('\\n');\n                console.log(output);\n                resolve(`output of nslookup command for ${website} :\\n\\n ${output}`);\n            }\n        });\n    });\n}\n\nconst results = await Promise.all(websites.map(nslookupHost));\nconsole.log(results);\nconst strValue = results.toString();\nreturn strValue;\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.1,
+      "position": [
+        1840,
+        -1800
+      ],
+      "id": "feb31da0-e83f-4a61-bac2-7f3fd41eedd0",
+      "name": "Nslookup check"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "additionalFields": {
+          "visibility": "public"
+        }
+      },
+      "type": "n8n-nodes-base.urlScanIo",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        -1360
+      ],
+      "id": "ad9e7f7d-5a6e-4b4d-98b6-a77ff3faf0e7",
+      "name": "urlscan.io",
+      "alwaysOutputData": false,
+      "credentials": {
+        "urlScanIoApi": {
+          "id": "7pUMV8Wmu222EqWg",
+          "name": "Unnamed credential"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9,
+              "triggerAtMinute": 27
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -3520,
+        -1960
+      ],
+      "id": "5630309f-78ca-4100-bc6e-b2ca4486dfd5",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0cae12dc-d31d-4320-9c36-f6afc25581bf",
+              "name": "website",
+              "value": "https://unicapital-inc.com/",
+              "type": "string"
+            },
+            {
+              "id": "bf610435-a72c-41de-abf4-f3b649623967",
+              "name": "keyword",
+              "value": "unicapital",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3300,
+        -1960
+      ],
+      "id": "72a8ccfd-37bb-4c60-9a74-bc2a3db715eb",
+      "name": "Keyword to monitor"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.website }}",
+        "additionalFields": {
+          "visibility": "public"
+        }
+      },
+      "type": "n8n-nodes-base.urlScanIo",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        -2660
+      ],
+      "id": "627985af-e91b-415e-88fe-0aa45ea551ea",
+      "name": "urlscan.io1",
+      "alwaysOutputData": false,
+      "credentials": {
+        "urlScanIoApi": {
+          "id": "7pUMV8Wmu222EqWg",
+          "name": "Unnamed credential"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -60,
+        -2660
+      ],
+      "id": "df7465b3-fcf8-4cb6-b8a5-b33ce0f6fd6d",
+      "name": "Wait1",
+      "webhookId": "afdfc48b-dced-48ee-872b-75398b45f165"
+    },
+    {
+      "parameters": {
+        "url": "=https://urlscan.io/screenshots/{{ $json.scanId }}.png",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        180,
+        -2740
+      ],
+      "id": "40f1799c-6d79-43fb-8a5d-afe002f3a04c",
+      "name": "Get screenshot of the website1",
+      "alwaysOutputData": false,
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "llama3.2-vision:latest",
+          "mode": "list",
+          "cachedResultName": "LLAMA3.2-VISION:LATEST"
+        },
+        "inputType": "base64",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        380,
+        -2740
+      ],
+      "id": "eacfcf8e-e155-4da0-9dce-1bd8218e42b5",
+      "name": "OpenAI1",
+      "alwaysOutputData": false,
+      "credentials": {
+        "openAiApi": {
+          "id": "miL67I3yTEf94Pj4",
+          "name": "OpenAi account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ab79a80a-ac46-498b-b4e7-3e35ff238796",
+              "leftValue": "={{ $json.scanId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -260,
+        -2460
+      ],
+      "id": "811a59c7-e754-4f63-8a64-e5befc7d66c5",
+      "name": "If2"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        620,
+        -2620
+      ],
+      "id": "f5c36e6c-5732-4c21-8e36-6fdffbb338d0",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        840,
+        -2620
+      ],
+      "id": "6693c05a-81e4-474c-b5c9-16375d5a8e8d",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        1540,
+        -2040
+      ],
+      "id": "5e5fa67a-a9dd-4cd1-9b89-ace2e405eafc",
+      "name": "Merge3"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1740,
+        -2040
+      ],
+      "id": "ad9b699f-f73b-48ba-a1a4-5d58a063bab1",
+      "name": "Aggregate2"
+    },
+    {
+      "parameters": {
+        "chatId": "685572525",
+        "text": "={{ $('AI Agent').item.json.output }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3020,
+        -2040
+      ],
+      "id": "4d3c5832-3e63-4509-8491-a41b398e492a",
+      "name": "Telegram1",
+      "webhookId": "5dde575a-793a-4ff9-8d79-1c378b5b1627",
+      "credentials": {
+        "telegramApi": {
+          "id": "J8yi5T3Nx88PmH2Z",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Parameter configuration\n*Original website URL\n*Potential phishing website keyword",
+        "height": 400,
+        "width": 560,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -3640,
+        -2100
+      ],
+      "id": "6999131a-af83-4662-8361-fb9dbfb8593f",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## Flow to analyze Original website \n*Capture screenshot of website and get it analyzed using vision model\n*Capture TLS certificate details",
+        "height": 520,
+        "width": 2380,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -540,
+        -2860
+      ],
+      "id": "be118167-645d-474f-bce0-6177575b30fb",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## Prepare list of potential domains to be analyzed based on provided website keyword\n*Download multiple TLD domains from czds\n*Find the domains matching user \"keyword\"\n*Prepare list of domains for detailed analysis",
+        "height": 540,
+        "width": 1100,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -3120,
+        -1520
+      ],
+      "id": "b02e0b51-cdf3-44d7-ac36-b5510b852f14",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## Analyze potential phishing domain one-by-one\n*Capture screenshot of website and get it analyzed using vision model\n*Capture TLS certificate details",
+        "height": 800,
+        "width": 3180,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1800,
+        -1820
+      ],
+      "id": "b9e8c183-fe1b-4063-aaf2-c3304040cafd",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "## Engage AI agent with tools for detailed analysis\n*Aggregate results of Original website and Potential phishing website \n*AI to analyze the results and prepare a short summary of analysis with verdict  ",
+        "height": 620,
+        "width": 900,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        -2260
+      ],
+      "id": "41fe0abd-b1a2-44b1-8758-0388e4c208d9",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "## Communicate analysis summary and verdict through Telegram",
+        "height": 300,
+        "width": 1100
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2560,
+        -2100
+      ],
+      "id": "1fda8c88-d15f-4304-8533-13aec6b5edbb",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1752515-e7bc-4b86-9d1a-e7168499bc3b",
+              "name": "url",
+              "value": "=http://{{ $('Process pipeline : Domain-by-Domain').item.json.url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -900,
+        -1560
+      ],
+      "id": "27ded060-3313-474b-9557-a6235dbae5aa",
+      "name": "HTTP"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1752515-e7bc-4b86-9d1a-e7168499bc3b",
+              "name": "url",
+              "value": "=https://{{ $('Process pipeline : Domain-by-Domain').item.json.url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -900,
+        -1360
+      ],
+      "id": "fa23abca-44ee-4e85-aa8c-87730da7f543",
+      "name": "HTTPS"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "additionalFields": {
+          "visibility": "public"
+        }
+      },
+      "type": "n8n-nodes-base.urlScanIo",
+      "typeVersion": 1,
+      "position": [
+        -640,
+        -1560
+      ],
+      "id": "603b6a83-8bf2-48ed-907e-98dc5fcd8e9e",
+      "name": "urlscan.io2",
+      "alwaysOutputData": false,
+      "credentials": {
+        "urlScanIoApi": {
+          "id": "7pUMV8Wmu222EqWg",
+          "name": "Unnamed credential"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ab79a80a-ac46-498b-b4e7-3e35ff238796",
+              "leftValue": "={{ $json.scanId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -400,
+        -1560
+      ],
+      "id": "70a540bb-96b4-4390-8096-e47dfe264ec9",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -200,
+        -1580
+      ],
+      "id": "daa7434d-26ef-4413-baca-e25c22d048dc",
+      "name": "Wait_for_scan_completion1",
+      "webhookId": "afdfc48b-dced-48ee-872b-75398b45f165"
+    },
+    {
+      "parameters": {
+        "url": "=https://urlscan.io/screenshots/{{ $json.scanId }}.png",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        20,
+        -1580
+      ],
+      "id": "10e4f975-1237-44c1-9ec9-c26987792ac8",
+      "name": "Get screenshot of the website2",
+      "alwaysOutputData": false,
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "llama3.2-vision:latest",
+          "mode": "list",
+          "cachedResultName": "LLAMA3.2-VISION:LATEST"
+        },
+        "inputType": "base64",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        580,
+        -1580
+      ],
+      "id": "3cc558be-4218-4e33-80ac-91014c31c3c5",
+      "name": "OpenAI2",
+      "alwaysOutputData": false,
+      "credentials": {
+        "openAiApi": {
+          "id": "miL67I3yTEf94Pj4",
+          "name": "OpenAi account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 2,
+      "position": [
+        -2240,
+        -1360
+      ],
+      "id": "f6b56f5a-ffe3-4c54-8acd-7e62d4ff9720",
+      "name": "Remove Duplicates"
+    },
+    {
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "685572525",
+        "file": "=https://urlscan.io/screenshots/{{ $('Aggregate2').item.json.data[1].scanId_HTTP }}.png",
+        "additionalFields": {
+          "caption": "={{ $('Aggregate2').item.json.data[1].Potential_phishing_or_fake_website_HTTP }}"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2600,
+        -2040
+      ],
+      "id": "b0e0d253-d2ef-4078-828f-9ef1a7d155b0",
+      "name": "Telegram",
+      "webhookId": "b6b307d4-4719-44e4-8ae5-fc91eda05f09",
+      "retryOnFail": true,
+      "credentials": {
+        "telegramApi": {
+          "id": "J8yi5T3Nx88PmH2Z",
+          "name": "Telegram account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.api }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        180,
+        -2560
+      ],
+      "id": "f914f7d4-66d5-46e5-b8fb-2aacdb10198d",
+      "name": "Extract SSL certificate details",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "09847a4d-f86b-40c2-a49a-58bed133980a",
+              "name": "lists.certificates",
+              "value": "={{ $json.lists.certificates.toJsonString() }}",
+              "type": "string"
+            },
+            {
+              "id": "f6669e02-5405-45cb-95a2-f79568944b67",
+              "name": "url",
+              "value": "={{ $('urlscan.io1').item.json.url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        380,
+        -2560
+      ],
+      "id": "9c314752-19b1-4c94-aad2-bcc0d22f5bd9",
+      "name": "Map fields"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "62acd92d-5be8-44a1-9976-174104b610b4",
+              "name": "Vision_model_descrion_of_Original_website",
+              "value": "={{ $json.data[0].content }}",
+              "type": "string"
+            },
+            {
+              "id": "65df013c-26e7-48c2-a6e2-70f6217babef",
+              "name": "SSL_Certificates_of_Original_website",
+              "value": "={{ $json.data[1].lists.certificates }}",
+              "type": "string"
+            },
+            {
+              "id": "7798207a-b3da-4e3a-b517-e1851a91b890",
+              "name": "Original_website",
+              "value": "={{ $json.data[1].url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1060,
+        -2620
+      ],
+      "id": "1c728ff8-e6cf-4c6b-9be2-a941d5c2c3ad",
+      "name": "Map Fields Final"
+    },
+    {
+      "parameters": {
+        "command": "=echo \"{{ $('Aggregate2').item.json.data[2].Potentially_phishing_or_fake_domain }}\" >> /home/node/.n8n/czds-api-client-python-master/reported_domains.txt"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        3240,
+        -2040
+      ],
+      "id": "93cd0a24-e21b-4385-a04d-c9b123a76409",
+      "name": "Execute Command"
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3460,
+        -2040
+      ],
+      "id": "2fe23c55-64f0-4ca0-8e83-fec87e459b35",
+      "name": "Wait",
+      "webhookId": "f5b17544-1573-4ce9-9b62-1a4dc71734cf"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        -1940,
+        -1460
+      ],
+      "id": "40518999-2a2f-42a6-85e9-1e8331c36f08",
+      "name": "Merge4"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ab79a80a-ac46-498b-b4e7-3e35ff238796",
+              "leftValue": "={{ $json.scanId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -480,
+        -1340
+      ],
+      "id": "873909d1-e2f1-4ca6-85af-8c20e520d6c6",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -220,
+        -1360
+      ],
+      "id": "37f04d4c-337e-4a1c-a1e1-d97ce1527a5b",
+      "name": "Wait_for_scan_completion2",
+      "webhookId": "afdfc48b-dced-48ee-872b-75398b45f165"
+    },
+    {
+      "parameters": {
+        "url": "=https://urlscan.io/screenshots/{{ $('Wait_for_scan_completion2').item.json.scanId }}.png",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        60,
+        -1360
+      ],
+      "id": "4ef654d3-ef62-431f-bbea-f9dd9de0c6d8",
+      "name": "Get screenshot of the website3",
+      "alwaysOutputData": false,
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "llama3.2-vision:latest",
+          "mode": "list",
+          "cachedResultName": "LLAMA3.2-VISION:LATEST"
+        },
+        "inputType": "base64",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        520,
+        -1340
+      ],
+      "id": "8d826a2b-1fb5-4e2c-87a0-bdb8f781313a",
+      "name": "OpenAI3",
+      "alwaysOutputData": false,
+      "credentials": {
+        "openAiApi": {
+          "id": "miL67I3yTEf94Pj4",
+          "name": "OpenAi account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fab294d2-4979-4f93-84b5-3711e5edc4a0",
+              "leftValue": "={{ $json.error.message }}",
+              "rightValue": "Scan is not finished yet",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        280,
+        -1360
+      ],
+      "id": "b14e7773-18a4-4e5b-aee4-7e7a68901f36",
+      "name": "If5"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1720,
+        -1460
+      ],
+      "id": "7900ca5e-6bb0-425d-8797-07286f05768f",
+      "name": "Process pipeline : Domain-by-Domain"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        1240,
+        -1440
+      ],
+      "id": "0865109c-b938-45fe-8d58-5abe2e61921d",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "/tmp/original_website.txt",
+        "options": {
+          "append": false
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1620,
+        -2820
+      ],
+      "id": "6d2b3bde-1658-4382-84f4-ce3a1968ded2",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {
+        "operation": "toJson",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1360,
+        -2820
+      ],
+      "id": "3ce0f825-c3a4-4f3d-9583-23a038577aba",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/tmp/original_website.txt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -1580,
+        -2240
+      ],
+      "id": "4eda850b-6411-4096-a290-445e52b68f91",
+      "name": "Read/Write Files from Disk1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "fromJson",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1360,
+        -2240
+      ],
+      "id": "7571d021-2944-468d-ace7-4b66e0e5d600",
+      "name": "Extract from File",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "97a98404-5e87-4ff1-9c6c-cc2b0d22f596",
+              "leftValue": "={{ $json.data[0] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1140,
+        -2240
+      ],
+      "id": "5d30a370-a04e-4181-b69f-70aa78d0143e",
+      "name": "If4"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "627079a0-56d7-4a81-ab0d-a32a3044d259",
+              "name": "website",
+              "value": "={{ $('Process pipeline : Domain-by-Domain').item.json.website }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -920,
+        -2240
+      ],
+      "id": "54ede5ba-7c18-4a26-bc78-68e74e730080",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "content": "## Check if original website is already analyzed\n**Conduct analysis only if original website is not already scanned.",
+        "height": 440,
+        "width": 1100
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1720,
+        -2380
+      ],
+      "id": "e834c916-ed6c-4285-89b9-2be7557165df",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "command": "rm -f /tmp/original_website.txt"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -1460,
+        -1700
+      ],
+      "id": "4b031294-041b-401e-9414-ecd88f8f2034",
+      "name": "Remove original website analysis"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a830915f-0c78-4f40-bd68-55d881fcd978",
+              "name": "Vision_model_description_for_website_on_HTTPS_for_potential_phishing_website",
+              "value": "={{ $('OpenAI3').item.json.content }}",
+              "type": "string"
+            },
+            {
+              "id": "7d475c6f-481e-4492-ae5d-74617bdabccc",
+              "name": "scanId_HTTPS",
+              "value": "={{ $('urlscan.io').item.json.scanId }}",
+              "type": "string"
+            },
+            {
+              "id": "8ca879ea-4156-4735-a286-033c49723b80",
+              "name": "Potential_phishing_or_fake_website_HTTPS",
+              "value": "={{ $('urlscan.io').item.json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "795e0b5f-f4d2-43ef-93a7-b5a2f51d2270",
+              "name": "Potential_phishing_or_fake_website_HTTPS_Certificate_Details",
+              "value": "={{ $json.stdout }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        980,
+        -1260
+      ],
+      "id": "0df0560b-204b-4d48-a050-f206a5000148",
+      "name": "HTTPS-OUTPUT",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Use this tool to check SSL certificate details of a domain",
+        "command": "=nmap -p 443 --script ssl-cert {{ $fromAI('domain_name', `domain name to be analyzed. Like domain.com as format`, 'string') }} |sed \"s/'//g\" |xargs |awk -F \"PORT STATE SERVICE 443/tcp open https\" '{print$2}' "
+      },
+      "type": "n8n-nodes-base.executeCommandTool",
+      "typeVersion": 1,
+      "position": [
+        2020,
+        -1800
+      ],
+      "id": "efdb4a89-a1fa-4151-a4e5-20977dbe7042",
+      "name": "NMAP_TOOL_FOR_SSL_CERTIFICATE_CHECK"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a830915f-0c78-4f40-bd68-55d881fcd978",
+              "name": "Vision_model_description_for_website_on_HTTP_for_potential_phishing_website",
+              "value": "={{ $json.content }}",
+              "type": "string"
+            },
+            {
+              "id": "56299605-be21-48b8-80c9-d2aba23c1f69",
+              "name": "scanId_HTTP",
+              "value": "={{ $('urlscan.io2').item.json.scanId }}",
+              "type": "string"
+            },
+            {
+              "id": "f74eb853-f11a-486a-a011-6a33ac799746",
+              "name": "Potential_phishing_or_fake_website_HTTP",
+              "value": "={{ $('urlscan.io2').item.json.url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        820,
+        -1540
+      ],
+      "id": "3feaec5c-2e3e-47f9-b64c-739725e2f8e4",
+      "name": "HTTP-OUTPUT",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "685572525",
+        "file": "=https://urlscan.io/screenshots/{{ $('Aggregate2').item.json.data[2].scanId_HTTPS }}.png",
+        "additionalFields": {
+          "caption": "={{ $('Aggregate2').item.json.data[2].Potential_phishing_or_fake_website_HTTPS }}"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2800,
+        -2040
+      ],
+      "id": "e997d790-f636-4689-b5a7-1936d539f354",
+      "name": "Telegram2",
+      "webhookId": "b6b307d4-4719-44e4-8ae5-fc91eda05f09",
+      "retryOnFail": true,
+      "credentials": {
+        "telegramApi": {
+          "id": "J8yi5T3Nx88PmH2Z",
+          "name": "Telegram account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "command": "=nmap -p 443 --script ssl-cert {{ $('Process pipeline : Domain-by-Domain').item.json.url }} |sed \"s/'//g\" | xargs |awk -F \"PORT STATE SERVICE 443/tcp open https\" '{print$2}' "
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        740,
+        -1340
+      ],
+      "id": "e5eaada4-5762-4167-9872-f7da79fded1d",
+      "name": "Check_SSL_Certificate"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fab294d2-4979-4f93-84b5-3711e5edc4a0",
+              "leftValue": "={{ $json.error.message }}",
+              "rightValue": "Scan is not finished yet",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        -1580
+      ],
+      "id": "64d4c451-3437-4227-b543-7667364e5e1b",
+      "name": "If6"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dateTimeTool",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        -1800
+      ],
+      "id": "b6d30c97-e303-4fe1-aba0-ec51c49cf664",
+      "name": "Date & Time"
+    },
+    {
+      "parameters": {
+        "command": "=nslookup -type=A {{ $json.url }} | grep -i nxdomain|wc -l"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -1400,
+        -1480
+      ],
+      "id": "b9191899-d6b0-4ead-836f-7fbe0aa67eb3",
+      "name": "Get A record"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "109f5f12-aa58-4cd0-8a25-885d6a921166",
+              "leftValue": "={{ $json.stdout.toNumber() }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1200,
+        -1480
+      ],
+      "id": "a36be0c8-e4fb-4574-ba1b-04c565da129b",
+      "name": "If3"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Remove Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Processing zone files": {
+      "main": [
+        [
+          {
+            "node": "Split field to array",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split field to array": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "whois check": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nslookup check": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "urlscan.io": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Keyword to monitor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keyword to monitor": {
+      "main": [
+        [
+          {
+            "node": "Processing zone files",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "urlscan.io1": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "Get screenshot of the website1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract SSL certificate details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get screenshot of the website1": {
+      "main": [
+        [
+          {
+            "node": "OpenAI1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI1": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Map Fields Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge3": {
+      "main": [
+        [
+          {
+            "node": "Aggregate2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate2": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram1": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP": {
+      "main": [
+        [
+          {
+            "node": "urlscan.io2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTPS": {
+      "main": [
+        [
+          {
+            "node": "urlscan.io",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "urlscan.io2": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Wait_for_scan_completion1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP-OUTPUT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get screenshot of the website2": {
+      "main": [
+        [
+          {
+            "node": "If6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait_for_scan_completion1": {
+      "main": [
+        [
+          {
+            "node": "Get screenshot of the website2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove Duplicates": {
+      "main": [
+        [
+          {
+            "node": "Merge4",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "OpenAI2": {
+      "main": [
+        [
+          {
+            "node": "HTTP-OUTPUT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram": {
+      "main": [
+        [
+          {
+            "node": "Telegram2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract SSL certificate details": {
+      "main": [
+        [
+          {
+            "node": "Map fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map fields": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Map Fields Final": {
+      "main": [
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Process pipeline : Domain-by-Domain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge4": {
+      "main": [
+        [
+          {
+            "node": "Process pipeline : Domain-by-Domain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Wait_for_scan_completion2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTPS-OUTPUT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait_for_scan_completion2": {
+      "main": [
+        [
+          {
+            "node": "Get screenshot of the website3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get screenshot of the website3": {
+      "main": [
+        [
+          {
+            "node": "If5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI3": {
+      "main": [
+        [
+          {
+            "node": "Check_SSL_Certificate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If5": {
+      "main": [
+        [
+          {
+            "node": "Wait_for_scan_completion2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OpenAI3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process pipeline : Domain-by-Domain": {
+      "main": [
+        [
+          {
+            "node": "Remove original website analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get A record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        []
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk1": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "If4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If4": {
+      "main": [
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "urlscan.io1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTPS-OUTPUT": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "NMAP_TOOL_FOR_SSL_CERTIFICATE_CHECK": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP-OUTPUT": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram2": {
+      "main": [
+        [
+          {
+            "node": "Telegram1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check_SSL_Certificate": {
+      "main": [
+        [
+          {
+            "node": "HTTPS-OUTPUT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If6": {
+      "main": [
+        [
+          {
+            "node": "Wait_for_scan_completion1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OpenAI2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Date & Time": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get A record": {
+      "main": [
+        [
+          {
+            "node": "If3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If3": {
+      "main": [
+        [
+          {
+            "node": "Process pipeline : Domain-by-Domain",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTPS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read/Write Files from Disk1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Dubai",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "65bf6e4d-0b93-4af4-ba60-d1c6fd2aa9b8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ec439b99ba991b0c75b5decbef6bc36e4fbbdcfd5fec9893e9b7f525afafb289"
+  },
+  "id": "FgZExLCSw2nhLcT7",
+  "tags": []
+}
